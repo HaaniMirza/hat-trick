@@ -1,3 +1,5 @@
+Hat Trick: Haani's first time making a Minecraft Mod. Seeks to add a few niche features and quality of life upgrades for lore purposes.
+
 New Entity: Enforcers
 	Currently only spawn using the '/summon hattrick:enforcer' command
 	Neutral mob that will maintain a distance to observe the player
