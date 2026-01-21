@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "EEE",
+    "RRR",
+    "ENE"
+  ],
+  "key": {
+    "E": {
+      "item": "hattrick:enforced_fiber"
+    },
+    "R": {
+      "item": "minecraft:red_wool"
+    },
+    "N": {
+      "item": "minecraft:nether_star"
+    }
+  },
+  "result": {
+    "item": "hattrick:hat_mans_hat"
+  }
+}
