@@ -62,5 +62,6 @@ public class HatTrickMod {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         HatTrickCommand.register(event.getDispatcher());
+        com.haanibiriyani.hattrick.command.HatManCommand.register(event.getDispatcher());
     }
 }
