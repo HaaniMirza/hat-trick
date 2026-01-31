@@ -28,7 +28,7 @@ public class TeleportParticleHandler {
 
         String command = parseResults.getReader().getString().split(" ")[0];
 
-        if (command.equals("tp") || command.equals("teleport")) {
+        if (command.equals("/tp") || command.equals("/teleport")) {
             CommandSourceStack source = context.getSource();
 
             try {
