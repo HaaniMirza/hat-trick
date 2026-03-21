@@ -9,4 +9,8 @@ public class ModModelLayers {
             new ResourceLocation(HatTrickMod.MODID, "enforcer"),
             "main"
     );
+    public static final ModelLayerLocation HAT_MAN_HAT_LAYER = new ModelLayerLocation(
+            new ResourceLocation("hattrick", "hat_mans_hat"),
+            "main"
+    );
 }
