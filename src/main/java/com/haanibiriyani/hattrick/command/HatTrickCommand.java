@@ -2,8 +2,10 @@ package com.haanibiriyani.hattrick.command;
 
 import com.haanibiriyani.hattrick.entity.EnforcerEntity;
 import com.haanibiriyani.hattrick.entity.ModEntities;
+import com.haanibiriyani.hattrick.entity.ai.EnforcerAggroManager;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,7 +13,6 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 
 import java.util.List;
@@ -22,13 +23,39 @@ public class HatTrickCommand {
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("target")
                         .then(Commands.argument("player", EntityArgument.player())
-                                .executes(context -> setTarget(context, EntityArgument.getPlayer(context, "player"))))
+                                .executes(context -> setTarget(context,
+                                        EntityArgument.getPlayer(context, "player"))))
                         .then(Commands.literal("clear")
                                 .executes(HatTrickCommand::clearTarget)))
                 .then(Commands.literal("aggro")
                         .then(Commands.argument("aggressive", BoolArgumentType.bool())
-                                .executes(context -> setAggro(context, BoolArgumentType.getBool(context, "aggressive")))))
+                                .executes(context -> setAggro(context,
+                                        BoolArgumentType.getBool(context, "aggressive")))))
+                .then(Commands.literal("config")
+                        .then(Commands.literal("groupsize")
+                                .then(Commands.argument("size", IntegerArgumentType.integer(1))
+                                        .executes(context -> setGroupSize(context,
+                                                IntegerArgumentType.getInteger(context, "size"))))
+                                // Also allow querying the current value with no argument
+                                .executes(HatTrickCommand::getGroupSize)))
         );
+    }
+
+    private static int setGroupSize(CommandContext<CommandSourceStack> context, int size) {
+        EnforcerAggroManager.setMinGroupSize(size);
+        context.getSource().sendSuccess(() -> Component.literal(
+                "Enforcer group aggro threshold set to " + size + " player(s). " +
+                        "All active warnings have been cleared."
+        ), true);
+        return size;
+    }
+
+    private static int getGroupSize(CommandContext<CommandSourceStack> context) {
+        int current = EnforcerAggroManager.getMinGroupSize();
+        context.getSource().sendSuccess(() -> Component.literal(
+                "Current Enforcer group aggro threshold: " + current + " player(s)."
+        ), false);
+        return current;
     }
 
     private static int setTarget(CommandContext<CommandSourceStack> context, ServerPlayer targetPlayer) {
@@ -56,9 +83,9 @@ public class HatTrickCommand {
 
         int finalCount = count;
         source.sendSuccess(() -> Component.literal(
-                "Set " + finalCount + " Enforcer(s) to target " + targetPlayer.getName().getString()
+                "Set " + finalCount + " Enforcer(s) to target " +
+                        targetPlayer.getName().getString()
         ), true);
-
         return count;
     }
 
@@ -89,7 +116,6 @@ public class HatTrickCommand {
         source.sendSuccess(() -> Component.literal(
                 "Cleared target for " + finalCount + " Enforcer(s)"
         ), true);
-
         return count;
     }
 
@@ -118,9 +144,9 @@ public class HatTrickCommand {
 
         int finalCount = count;
         source.sendSuccess(() -> Component.literal(
-                "Set " + finalCount + " Enforcer(s) to " + (aggressive ? "aggressive" : "passive")
+                "Set " + finalCount + " Enforcer(s) to " +
+                        (aggressive ? "aggressive" : "passive")
         ), true);
-
         return count;
     }
 }

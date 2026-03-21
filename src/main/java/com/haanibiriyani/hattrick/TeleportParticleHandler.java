@@ -28,14 +28,14 @@ public class TeleportParticleHandler {
 
         String command = parseResults.getReader().getString().split(" ")[0];
 
-        if (command.equals("/tp") || command.equals("/teleport")) {
+        if (command.contains("/tp") || command.contains("/teleport")) {
             CommandSourceStack source = context.getSource();
 
             try {
                 Vec3 targetPos = getTargetPosition(context, source);
                 ServerLevel serverLevel = (ServerLevel) source.getLevel();
                 if (targetPos != null && serverLevel != null) {
-                    serverLevel.sendParticles(ParticleTypes.PORTAL, targetPos.x, targetPos.y, targetPos.z, 50, 0.5, 1.0, 0.5, 0.1);
+                    serverLevel.sendParticles(ParticleTypes.PORTAL, targetPos.x, targetPos.y, targetPos.z, 50, 0.5, 1.0, 0.5, 1);
                 }
             } catch (Exception e) {
                 //

@@ -1,12 +1,15 @@
 package com.haanibiriyani.hattrick.entity;
 
 import com.haanibiriyani.hattrick.ModItems;
+import com.haanibiriyani.hattrick.ModSounds;
 import com.haanibiriyani.hattrick.entity.ai.EnforcerAggroManager;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
@@ -26,11 +29,19 @@ public class EnforcerEntity extends PathfinderMob {
             SynchedEntityData.defineId(EnforcerEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> CAN_SUMMON =
             SynchedEntityData.defineId(EnforcerEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> RETALIATING =
+            SynchedEntityData.defineId(EnforcerEntity.class, EntityDataSerializers.BOOLEAN);
 
     private UUID targetPlayerUUID;
     private int aggroCheckCooldown = 0;
     private boolean hasReinforcedHalf = false;
     private boolean hasReinforcedQuarter = false;
+
+    private int aggroSoundCooldown = 0;
+    private int observeSoundCooldown = 0;
+    private int idleSoundCooldown = 0;
+
+    private boolean wasInWarningState = false;
 
     public EnforcerEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -50,6 +61,7 @@ public class EnforcerEntity extends PathfinderMob {
     public void onRemovedFromWorld() {
         super.onRemovedFromWorld();
         com.haanibiriyani.hattrick.EnforcerTracker.unregisterEnforcer(this);
+        EnforcerAggroManager.clearWarning(this);
     }
 
     private void updateAttackDamage(ServerLevel level) {
@@ -61,7 +73,7 @@ public class EnforcerEntity extends PathfinderMob {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.35D)
-                .add(Attributes.ATTACK_DAMAGE, 1.0D) // Base damage, will be scaled dynamically
+                .add(Attributes.ATTACK_DAMAGE, 3.0D) // Base damage, will be scaled dynamically
                 .add(Attributes.FOLLOW_RANGE, 35.0D);
     }
 
@@ -70,6 +82,7 @@ public class EnforcerEntity extends PathfinderMob {
         super.defineSynchedData();
         this.entityData.define(AGGRESSIVE, false);
         this.entityData.define(CAN_SUMMON, true);
+        this.entityData.define(RETALIATING, false);
     }
 
     @Override
@@ -123,8 +136,88 @@ public class EnforcerEntity extends PathfinderMob {
             if (isAggressive() || getTarget() != null) {
                 applyDebuffsToNearbyPlayers();
             }
+
+            tickSounds();
         }
     }
+
+    private void tickSounds() {
+        boolean aggressive = isAggressive() || getTarget() != null;
+        boolean inWarning = EnforcerAggroManager.isInWarningState(this);
+
+        if (inWarning && !wasInWarningState) {
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    ModSounds.ENFORCER_WARN.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+        }
+        wasInWarningState = inWarning;
+
+        boolean isObserving = !aggressive && !inWarning &&
+                !this.level().getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(35.0D),
+                        player -> !player.isSpectator() && this.hasLineOfSight(player)).isEmpty();
+
+        if (aggressive) {
+            if (aggroSoundCooldown > 0) {
+                aggroSoundCooldown--;
+            } else {
+                aggroSoundCooldown = 100 + this.random.nextInt(40);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_AGGRO.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            observeSoundCooldown = 0;
+            idleSoundCooldown = 0;
+
+        } else if (isObserving) {
+            if (observeSoundCooldown > 0) {
+                observeSoundCooldown--;
+            } else {
+                observeSoundCooldown = 60 + this.random.nextInt(40);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_OBSERVE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            aggroSoundCooldown = 0;
+            idleSoundCooldown = 0;
+
+        } else if (inWarning) {
+            aggroSoundCooldown = 0;
+            observeSoundCooldown = 0;
+            idleSoundCooldown = 0;
+
+        } else {
+            if (idleSoundCooldown > 0) {
+                idleSoundCooldown--;
+            } else {
+                idleSoundCooldown = 200 + this.random.nextInt(200);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_IDLE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            aggroSoundCooldown = 0;
+            observeSoundCooldown = 0;
+        }
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        boolean result = super.hurt(source, amount);
+        if (result && !this.level().isClientSide) {
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    ModSounds.ENFORCER_DAMAGE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            if (source.getEntity() instanceof Player) {
+                this.setRetaliating(true);
+                this.setAggressive(true);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public void die(DamageSource source) {
+        super.die(source);
+        if (!this.level().isClientSide) {
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    ModSounds.ENFORCER_DEATH.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+        }
+    }
+
 
     @Override
     public boolean removeWhenFarAway(double distanceToClosestPlayer) {
@@ -137,6 +230,32 @@ public class EnforcerEntity extends PathfinderMob {
     }
 
     private void checkAggroConditions() {
+
+        if (this.getTarget() == null) {
+
+            if (isAggressive()) {
+                boolean hasDesignatedTarget = targetPlayerUUID != null &&
+                        this.level() instanceof ServerLevel serverLevel &&
+                        serverLevel.getServer().getPlayerList().getPlayer(targetPlayerUUID) != null;
+
+                boolean hasNearbyGroup = !this.level().getEntitiesOfClass(
+                        Player.class,
+                        this.getBoundingBox().inflate(EnforcerAggroManager.getGroupDetectionRange()),
+                        player -> !player.isSpectator() && this.hasLineOfSight(player)
+                ).isEmpty() && this.level().getEntitiesOfClass(
+                        Player.class,
+                        this.getBoundingBox().inflate(EnforcerAggroManager.getGroupDetectionRange()),
+                        player -> !player.isSpectator() && this.hasLineOfSight(player)
+                ).size() >= EnforcerAggroManager.getMinGroupSize();
+
+                if (!hasDesignatedTarget && !hasNearbyGroup && !isRetaliating()) {
+                    setAggressive(false);
+                    setTarget(null);
+                    return;
+                }
+            }
+        }
+
         if (this.getTarget() != null) {
             return; // Already has a target
         }
@@ -203,6 +322,7 @@ public class EnforcerEntity extends PathfinderMob {
         for (EnforcerEntity enforcer : nearbyEnforcers) {
             // Make them aggressive
             enforcer.setAggressive(true);
+            enforcer.setRetaliating(false);
 
             // If this Enforcer has a target, share it
             if (myTarget != null) {
@@ -216,18 +336,19 @@ public class EnforcerEntity extends PathfinderMob {
             return false;
         }
 
-        // Always attack if globally aggressive
+        // Attack if already flagged aggressive
         if (isAggressive()) {
             return true;
         }
 
-        // Attack designated target
+        // Attack designated target player
         if (targetPlayerUUID != null && player.getUUID().equals(targetPlayerUUID)) {
             return true;
         }
 
-        // Check for player groups
-        return EnforcerAggroManager.isInPlayerGroup(player, this);
+        // Group aggro is handled exclusively by shouldAggroOnPlayerGroup()
+        // via checkAggroConditions(), which respects the warning timer.
+        return false;
     }
 
     public void setTargetPlayer(UUID playerUUID) {
@@ -247,6 +368,14 @@ public class EnforcerEntity extends PathfinderMob {
 
     public boolean isAggressive() {
         return this.entityData.get(AGGRESSIVE);
+    }
+
+    public void setRetaliating(boolean retaliating) {
+        this.entityData.set(RETALIATING, retaliating);
+    }
+
+    public boolean isRetaliating() {
+        return this.entityData.get(RETALIATING);
     }
 
     public void setCanSummon(boolean canSummon) {
@@ -288,6 +417,9 @@ public class EnforcerEntity extends PathfinderMob {
 
         System.out.println("Summoning " + count + " reinforcements");
 
+        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                ModSounds.ENFORCER_SUMMON.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+
         for (int i = 0; i < count; i++) {
             EnforcerEntity reinforcement = ModEntities.ENFORCER.get().create(serverLevel);
             if (reinforcement != null) {
@@ -304,6 +436,7 @@ public class EnforcerEntity extends PathfinderMob {
 
                 // Copy aggressive state and target
                 reinforcement.setAggressive(this.isAggressive());
+                reinforcement.setRetaliating(this.isRetaliating());
                 if (this.getTarget() != null) {
                     reinforcement.setTarget(this.getTarget());
                 }

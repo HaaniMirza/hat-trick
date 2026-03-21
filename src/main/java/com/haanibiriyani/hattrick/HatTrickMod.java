@@ -27,6 +27,7 @@ public class HatTrickMod {
         ModBlocks.BLOCKS.register(modEventBus);
         ModBlocks.registerBlockItems(ModItems.ITEMS);
         ModEnchantments.ENCHANTMENTS.register(modEventBus);
+        ModSounds.SOUND_EVENTS.register(modEventBus);
         com.haanibiriyani.hattrick.block.entity.ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
         com.haanibiriyani.hattrick.block.menu.ModMenuTypes.MENUS.register(modEventBus);
 

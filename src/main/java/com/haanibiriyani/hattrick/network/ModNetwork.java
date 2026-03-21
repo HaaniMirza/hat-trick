@@ -41,5 +41,13 @@ public class ModNetwork {
                 SyncEnforcementBlockPacket::decode,
                 SyncEnforcementBlockPacket::handle
         );
+
+        CHANNEL.registerMessage(
+                packetId++,
+                HatManSyncPacket.class,
+                HatManSyncPacket::encode,
+                HatManSyncPacket::decode,
+                HatManSyncPacket::handle
+        );
     }
 }

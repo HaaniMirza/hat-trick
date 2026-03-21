@@ -27,9 +27,9 @@ public class EnforcerTracker {
      */
     public static double calculateAttackDamage(ServerLevel level) {
         int count = getEnforcerCount(level);
-        if (count <= 0) return 1.0D; // Fallback
+        if (count <= 0) return 3.0D; // Fallback
 
-        return 1.0D + ((count - 1) * 2.0D);
+        return 3.0D + ((count - 1) * 2.0D);
     }
 
     public static int getEnforcerCount(ServerLevel level) {

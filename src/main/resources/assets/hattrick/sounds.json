@@ -1,0 +1,61 @@
+{
+  "enforcer_aggro": {
+    "sounds": [
+      { "name": "hattrick:aggro_a" },
+      { "name": "hattrick:aggro_b" },
+      { "name": "hattrick:aggro_c" },
+      { "name": "hattrick:aggro_d" }
+    ]
+  },
+  "enforcer_aggro_bg": {
+    "sounds": [{ "name": "hattrick:aggro_bg" }]
+  },
+  "enforcer_damage": {
+    "sounds": [
+      { "name": "hattrick:damage_a" },
+      { "name": "hattrick:damage_b" },
+      { "name": "hattrick:damage_c" }
+    ]
+  },
+  "enforcer_death": {
+    "sounds": [
+      { "name": "hattrick:death_a" },
+      { "name": "hattrick:death_b" },
+      { "name": "hattrick:death_c" }
+    ]
+  },
+  "enforcer_idle": {
+    "sounds": [
+      { "name": "hattrick:idle_a" },
+      { "name": "hattrick:idle_b" },
+      { "name": "hattrick:idle_c" },
+      { "name": "hattrick:idle_d" }
+    ]
+  },
+  "enforcer_observe": {
+    "sounds": [
+      { "name": "hattrick:observe_a" },
+      { "name": "hattrick:observe_b" },
+      { "name": "hattrick:observe_c" },
+      { "name": "hattrick:observe_d" }
+    ]
+  },
+  "enforcer_summon": {
+    "sounds": [
+      { "name": "hattrick:summon_a" },
+      { "name": "hattrick:summon_b" },
+      { "name": "hattrick:summon_c" }
+    ]
+  },
+  "enforcer_warn": {
+    "sounds": [
+      { "name": "hattrick:warn_a" },
+      { "name": "hattrick:warn_b" },
+      { "name": "hattrick:warn_c" }
+    ]
+  },
+  "music.silence": {
+    "sounds": [],
+    "replace": true
+  }
+}

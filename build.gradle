@@ -1,8 +1,20 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    }
+    dependencies {
+        classpath 'org.spongepowered:mixingradle:0.7.+'
+    }
+}
+
 plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
+
+apply plugin: 'org.spongepowered.mixin'
 
 version = '1.0.0'
 group = 'com.haanibiriyani.hattrick'
@@ -40,8 +52,23 @@ minecraft {
     }
 }
 
+mixin {
+    // MixinGradle generates the refmap and wires everything up automatically
+    add sourceSets.main, 'hattrick-refmap.json'
+    config 'hattrick.mixins.json'
+}
+
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.2.0'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+jar {
+    manifest {
+        attributes([
+                'MixinConfigs': 'hattrick.mixins.json'
+        ])
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {

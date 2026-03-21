@@ -1,0 +1,18 @@
+{
+  "type": "hattrick:timeout_abyss",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "hattrick:timeout_abyss",
+      "layers": [
+        {
+          "block": "minecraft:bedrock",
+          "height": 1
+        }
+      ],
+      "lakes": false,
+      "features": false,
+      "structure_overrides": []
+    }
+  }
+}

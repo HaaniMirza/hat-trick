@@ -1,5 +1,7 @@
 package com.haanibiriyani.hattrick;
 
+import com.haanibiriyani.hattrick.network.HatManSyncPacket;
+import com.haanibiriyani.hattrick.network.ModNetwork;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -9,8 +11,10 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -25,23 +29,44 @@ public class HatManTransformationHandler {
         boolean isTransformed = serverPlayer.getPersistentData().getBoolean("HatManTransformed");
         boolean wasHidden = serverPlayer.getPersistentData().getBoolean("TabListHidden");
 
-        // Check every 20 ticks (once per second) to update tab list visibility
         if (serverPlayer.tickCount % 20 == 0) {
             if (isTransformed && !wasHidden) {
-                // Remove from tab list
                 hidePlayerFromTabList(serverPlayer);
                 serverPlayer.getPersistentData().putBoolean("TabListHidden", true);
             } else if (!isTransformed && wasHidden) {
-                // Add back to tab list
                 showPlayerInTabList(serverPlayer);
                 serverPlayer.getPersistentData().putBoolean("TabListHidden", false);
             }
         }
     }
 
+    /**
+     * When a player joins, send them sync packets for every currently transformed
+     * player so their client immediately shows the correct Hat Man skin on each one.
+     */
+    @SubscribeEvent
+    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer joiningPlayer)) return;
+
+        List<ServerPlayer> allPlayers = joiningPlayer.getServer().getPlayerList().getPlayers();
+
+        for (ServerPlayer onlinePlayer : allPlayers) {
+            // Skip the joining player themselves — TransformPacket already
+            // broadcasts to ALL when they toggle, including themselves
+            if (onlinePlayer == joiningPlayer) continue;
+
+            if (onlinePlayer.getPersistentData().getBoolean("HatManTransformed")) {
+                ModNetwork.CHANNEL.send(
+                        PacketDistributor.PLAYER.with(() -> joiningPlayer),
+                        new HatManSyncPacket(onlinePlayer.getUUID(), true)
+                );
+            }
+        }
+    }
+
     private static void hidePlayerFromTabList(ServerPlayer player) {
-        // Send packet to all players to remove this player from their tab list
-        ClientboundPlayerInfoRemovePacket removePacket = new ClientboundPlayerInfoRemovePacket(List.of(player.getUUID()));
+        ClientboundPlayerInfoRemovePacket removePacket =
+                new ClientboundPlayerInfoRemovePacket(List.of(player.getUUID()));
 
         for (ServerPlayer otherPlayer : player.getServer().getPlayerList().getPlayers()) {
             if (otherPlayer != player) {
@@ -51,7 +76,6 @@ public class HatManTransformationHandler {
     }
 
     private static void showPlayerInTabList(ServerPlayer player) {
-        // Send packet to all players to add this player back to their tab list
         ClientboundPlayerInfoUpdatePacket addPacket = new ClientboundPlayerInfoUpdatePacket(
                 ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER,
                 player
@@ -70,12 +94,9 @@ public class HatManTransformationHandler {
         boolean isTransformed = player.getPersistentData().getBoolean("HatManTransformed");
 
         if (isTransformed) {
-            // Cancel the normal chat message
             event.setCanceled(true);
 
-            // Create custom formatted message: purple, bold, italic, no name
             String message = event.getMessage().getString();
-
             MutableComponent formattedMessage = Component.literal(message)
                     .setStyle(Style.EMPTY
                             .withColor(ChatFormatting.DARK_PURPLE)
@@ -83,7 +104,6 @@ public class HatManTransformationHandler {
                             .withItalic(true)
                     );
 
-            // Send to all players
             player.getServer().getPlayerList().broadcastSystemMessage(formattedMessage, false);
         }
     }
