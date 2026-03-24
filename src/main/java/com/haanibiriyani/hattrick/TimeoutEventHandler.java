@@ -36,7 +36,6 @@ public class TimeoutEventHandler {
     public static void onLivingDeath(LivingDeathEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        // Players cannot die inside the Timeout Void — just restore health
         if (player.level().dimension().equals(ModDimensions.TIMEOUT_ABYSS_LEVEL_KEY)) {
             event.setCanceled(true);
             player.setHealth(player.getMaxHealth());
@@ -48,10 +47,11 @@ public class TimeoutEventHandler {
         net.minecraft.world.entity.Entity killer = event.getSource().getEntity();
         if (killer instanceof EnforcerEntity enforcer && enforcer.isRetaliating()) {
             enforcer.setRetaliating(false);
+            // AGGRO LIST: remove the killed player from the aggro set
+            enforcer.clearAggroTargets();
             return;
         }
 
-        // Cancel vanilla death (no item drop, no death screen, no respawn)
         event.setCanceled(true);
         TimeoutAbyssManager.sendToTimeout(player);
     }

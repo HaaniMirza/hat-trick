@@ -3,7 +3,6 @@ package com.haanibiriyani.hattrick.entity;
 import com.haanibiriyani.hattrick.ModItems;
 import com.haanibiriyani.hattrick.ModSounds;
 import com.haanibiriyani.hattrick.entity.ai.EnforcerAggroManager;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -22,7 +21,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-import java.util.UUID;
+import java.util.*;
 
 public class EnforcerEntity extends PathfinderMob {
     private static final EntityDataAccessor<Boolean> AGGRESSIVE =
@@ -32,20 +31,21 @@ public class EnforcerEntity extends PathfinderMob {
     private static final EntityDataAccessor<Boolean> RETALIATING =
             SynchedEntityData.defineId(EnforcerEntity.class, EntityDataSerializers.BOOLEAN);
 
-    private UUID targetPlayerUUID;
+    // AGGRO LIST: replaces single targetPlayerUUID
+    private final Set<UUID> aggroTargets = new HashSet<>();
+
     private int aggroCheckCooldown = 0;
     private boolean hasReinforcedHalf = false;
     private boolean hasReinforcedQuarter = false;
 
-    private int aggroSoundCooldown = 0;
+    private int aggroSoundCooldown   = 0;
     private int observeSoundCooldown = 0;
-    private int idleSoundCooldown = 0;
-
+    private int idleSoundCooldown    = 0;
     private boolean wasInWarningState = false;
 
     public EnforcerEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
-        this.setMaxUpStep(2.0F); // Can step up 2 blocks
+        this.setMaxUpStep(2.0F);
     }
 
     @Override
@@ -73,7 +73,7 @@ public class EnforcerEntity extends PathfinderMob {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.35D)
-                .add(Attributes.ATTACK_DAMAGE, 3.0D) // Base damage, will be scaled dynamically
+                .add(Attributes.ATTACK_DAMAGE, 3.0D)
                 .add(Attributes.FOLLOW_RANGE, 35.0D);
     }
 
@@ -104,10 +104,8 @@ public class EnforcerEntity extends PathfinderMob {
         super.tick();
 
         if (!this.level().isClientSide) {
-            // Check for reinforcement summoning every tick
             if (canSummon()) {
                 float healthPercentage = this.getHealth() / this.getMaxHealth();
-                // Log every 20 ticks to avoid spam
                 if (this.tickCount % 20 == 0) {
                     System.out.println("Enforcer health: " + this.getHealth() + "/" + this.getMaxHealth() + " (" + (healthPercentage * 100) + "%)");
                     System.out.println("Can summon: " + canSummon() + ", HasReinforcedHalf: " + hasReinforcedHalf + ", HasReinforcedQuarter: " + hasReinforcedQuarter);
@@ -118,80 +116,23 @@ public class EnforcerEntity extends PathfinderMob {
             if (aggroCheckCooldown > 0) {
                 aggroCheckCooldown--;
             } else {
-                aggroCheckCooldown = 20; // Check every second
+                aggroCheckCooldown = 20;
                 checkAggroConditions();
 
-                // Update attack damage periodically based on enforcer count
                 if (this.level() instanceof ServerLevel serverLevel) {
                     updateAttackDamage(serverLevel);
                 }
 
-                // Alert nearby Enforcers if this one is aggressive
                 if (isAggressive() || getTarget() != null) {
                     alertNearbyEnforcers();
                 }
             }
 
-            // Apply debuffs to nearby players if aggressive
             if (isAggressive() || getTarget() != null) {
                 applyDebuffsToNearbyPlayers();
             }
 
             tickSounds();
-        }
-    }
-
-    private void tickSounds() {
-        boolean aggressive = isAggressive() || getTarget() != null;
-        boolean inWarning = EnforcerAggroManager.isInWarningState(this);
-
-        if (inWarning && !wasInWarningState) {
-            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                    ModSounds.ENFORCER_WARN.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-        }
-        wasInWarningState = inWarning;
-
-        boolean isObserving = !aggressive && !inWarning &&
-                !this.level().getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(35.0D),
-                        player -> !player.isSpectator() && this.hasLineOfSight(player)).isEmpty();
-
-        if (aggressive) {
-            if (aggroSoundCooldown > 0) {
-                aggroSoundCooldown--;
-            } else {
-                aggroSoundCooldown = 100 + this.random.nextInt(40);
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        ModSounds.ENFORCER_AGGRO.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-            }
-            observeSoundCooldown = 0;
-            idleSoundCooldown = 0;
-
-        } else if (isObserving) {
-            if (observeSoundCooldown > 0) {
-                observeSoundCooldown--;
-            } else {
-                observeSoundCooldown = 60 + this.random.nextInt(40);
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        ModSounds.ENFORCER_OBSERVE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-            }
-            aggroSoundCooldown = 0;
-            idleSoundCooldown = 0;
-
-        } else if (inWarning) {
-            aggroSoundCooldown = 0;
-            observeSoundCooldown = 0;
-            idleSoundCooldown = 0;
-
-        } else {
-            if (idleSoundCooldown > 0) {
-                idleSoundCooldown--;
-            } else {
-                idleSoundCooldown = 200 + this.random.nextInt(200);
-                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
-                        ModSounds.ENFORCER_IDLE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-            }
-            aggroSoundCooldown = 0;
-            observeSoundCooldown = 0;
         }
     }
 
@@ -201,9 +142,13 @@ public class EnforcerEntity extends PathfinderMob {
         if (result && !this.level().isClientSide) {
             this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                     ModSounds.ENFORCER_DAMAGE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
-            if (source.getEntity() instanceof Player) {
+
+            // AGGRO LIST: add only the attacking player to the aggro set
+            if (source.getEntity() instanceof Player attacker) {
+                aggroTargets.add(attacker.getUUID());
                 this.setRetaliating(true);
                 this.setAggressive(true);
+                this.setTarget(attacker);
             }
         }
         return result;
@@ -218,93 +163,135 @@ public class EnforcerEntity extends PathfinderMob {
         }
     }
 
+    private void tickSounds() {
+        boolean aggressive = isAggressive() || getTarget() != null;
+        boolean inWarning  = EnforcerAggroManager.isInWarningState(this);
+
+        if (inWarning && !wasInWarningState) {
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    ModSounds.ENFORCER_WARN.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+        }
+        wasInWarningState = inWarning;
+
+        boolean isObserving = !aggressive && !inWarning &&
+                !this.level().getEntitiesOfClass(Player.class,
+                        this.getBoundingBox().inflate(35.0D),
+                        player -> !player.isSpectator() && this.hasLineOfSight(player)
+                ).isEmpty();
+
+        if (aggressive) {
+            if (aggroSoundCooldown > 0) {
+                aggroSoundCooldown--;
+            } else {
+                aggroSoundCooldown = 100 + this.random.nextInt(40);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_AGGRO.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            observeSoundCooldown = 0;
+            idleSoundCooldown    = 0;
+
+        } else if (isObserving) {
+            if (observeSoundCooldown > 0) {
+                observeSoundCooldown--;
+            } else {
+                observeSoundCooldown = 60 + this.random.nextInt(40);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_OBSERVE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            aggroSoundCooldown = 0;
+            idleSoundCooldown  = 0;
+
+        } else if (inWarning) {
+            aggroSoundCooldown   = 0;
+            observeSoundCooldown = 0;
+            idleSoundCooldown    = 0;
+
+        } else {
+            if (idleSoundCooldown > 0) {
+                idleSoundCooldown--;
+            } else {
+                idleSoundCooldown = 200 + this.random.nextInt(200);
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                        ModSounds.ENFORCER_IDLE.get(), SoundSource.HOSTILE, 1.0F, 1.0F);
+            }
+            aggroSoundCooldown   = 0;
+            observeSoundCooldown = 0;
+        }
+    }
 
     @Override
     public boolean removeWhenFarAway(double distanceToClosestPlayer) {
-        return false; // Never despawn naturally
+        return false;
     }
 
     @Override
     public boolean requiresCustomPersistence() {
-        return true; // Always persist
+        return true;
     }
 
     private void checkAggroConditions() {
+        // AGGRO LIST: de-escalate if no target and no remaining aggro targets are alive nearby
+        if (this.getTarget() == null && isAggressive()) {
+            pruneDeadOrGoneTargets();
 
-        if (this.getTarget() == null) {
-
-            if (isAggressive()) {
-                boolean hasDesignatedTarget = targetPlayerUUID != null &&
-                        this.level() instanceof ServerLevel serverLevel &&
-                        serverLevel.getServer().getPlayerList().getPlayer(targetPlayerUUID) != null;
-
-                boolean hasNearbyGroup = !this.level().getEntitiesOfClass(
-                        Player.class,
-                        this.getBoundingBox().inflate(EnforcerAggroManager.getGroupDetectionRange()),
-                        player -> !player.isSpectator() && this.hasLineOfSight(player)
-                ).isEmpty() && this.level().getEntitiesOfClass(
-                        Player.class,
-                        this.getBoundingBox().inflate(EnforcerAggroManager.getGroupDetectionRange()),
-                        player -> !player.isSpectator() && this.hasLineOfSight(player)
-                ).size() >= EnforcerAggroManager.getMinGroupSize();
-
-                if (!hasDesignatedTarget && !hasNearbyGroup && !isRetaliating()) {
-                    setAggressive(false);
-                    setTarget(null);
-                    return;
-                }
-            }
-        }
-
-        if (this.getTarget() != null) {
-            return; // Already has a target
-        }
-
-        // Check for designated target player
-        if (targetPlayerUUID != null && this.level() instanceof ServerLevel serverLevel) {
-            Player targetPlayer = serverLevel.getServer().getPlayerList().getPlayer(targetPlayerUUID);
-            if (targetPlayer != null && this.distanceToSqr(targetPlayer) < 35.0D * 35.0D && this.hasLineOfSight(targetPlayer)) {
-                this.setTarget(targetPlayer);
+            if (aggroTargets.isEmpty() && !isRetaliating()) {
+                setAggressive(false);
                 return;
             }
         }
 
-        // Check for group of 3+ players
-        if (EnforcerAggroManager.shouldAggroOnPlayerGroup(this)) {
-            return; // Target set by manager
+        if (this.getTarget() != null) return;
+
+        // AGGRO LIST: check group aggro — add all group members to aggro set
+        List<Player> groupTargets = EnforcerAggroManager.getAggroTargetsFromGroup(this);
+        if (!groupTargets.isEmpty()) {
+            for (Player p : groupTargets) {
+                aggroTargets.add(p.getUUID());
+            }
+            setAggressive(true);
+            // Target the closest
+            groupTargets.stream()
+                    .min(Comparator.comparingDouble(this::distanceToSqr))
+                    .ifPresent(this::setTarget);
         }
+    }
+
+    /**
+     * Removes UUIDs from aggroTargets if that player is no longer alive or
+     * within follow range. Called during de-escalation checks.
+     */
+    // AGGRO LIST: cleans up stale targets
+    private void pruneDeadOrGoneTargets() {
+        if (!(this.level() instanceof ServerLevel serverLevel)) return;
+
+        aggroTargets.removeIf(uuid -> {
+            Player player = serverLevel.getServer().getPlayerList().getPlayer(uuid);
+            // Remove if offline, dead, or out of a generous tracking range
+            return player == null || !player.isAlive() ||
+                    this.distanceToSqr(player) > 60.0D * 60.0D;
+        });
     }
 
     private void applyDebuffsToNearbyPlayers() {
         final double DEBUFF_RANGE = 5.0D;
-        final int EFFECT_DURATION = 60; // 3 seconds (20 ticks per second)
+        final int EFFECT_DURATION = 60;
 
+        // AGGRO LIST: only debuff players in the aggro target list
         java.util.List<Player> nearbyPlayers = this.level().getEntitiesOfClass(
                 Player.class,
                 this.getBoundingBox().inflate(DEBUFF_RANGE),
                 player -> !player.isSpectator() && !player.isCreative()
+                        && aggroTargets.contains(player.getUUID())
         );
 
         for (Player player : nearbyPlayers) {
-            // Weakness III (amplifier 2 = level 3)
             player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.WEAKNESS,
-                    EFFECT_DURATION,
-                    2, // Weakness III
-                    false,
-                    false,
-                    true
-            ));
+                    EFFECT_DURATION, 2, false, false, true));
 
-            // Slowness IV (amplifier 3 = level 4)
             player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN,
-                    EFFECT_DURATION,
-                    3, // Slowness IV
-                    false,
-                    false,
-                    true
-            ));
+                    EFFECT_DURATION, 3, false, false, true));
         }
     }
 
@@ -320,11 +307,11 @@ public class EnforcerEntity extends PathfinderMob {
         LivingEntity myTarget = this.getTarget();
 
         for (EnforcerEntity enforcer : nearbyEnforcers) {
-            // Make them aggressive
             enforcer.setAggressive(true);
             enforcer.setRetaliating(false);
+            // AGGRO LIST: propagate our aggro target list to alerted enforcers
+            enforcer.aggroTargets.addAll(this.aggroTargets);
 
-            // If this Enforcer has a target, share it
             if (myTarget != null) {
                 enforcer.setTarget(myTarget);
             }
@@ -336,34 +323,33 @@ public class EnforcerEntity extends PathfinderMob {
             return false;
         }
 
-        // Attack if already flagged aggressive
-        if (isAggressive()) {
+        // AGGRO LIST: only attack players in the aggro set
+        if (isAggressive() && aggroTargets.contains(player.getUUID())) {
             return true;
         }
 
-        // Attack designated target player
-        if (targetPlayerUUID != null && player.getUUID().equals(targetPlayerUUID)) {
-            return true;
-        }
-
-        // Group aggro is handled exclusively by shouldAggroOnPlayerGroup()
-        // via checkAggroConditions(), which respects the warning timer.
         return false;
     }
 
-    public void setTargetPlayer(UUID playerUUID) {
-        this.targetPlayerUUID = playerUUID;
-        if (playerUUID == null) {
-            this.setTarget(null);
-        }
+    // AGGRO LIST: public accessors for use in TimeoutEventHandler and summonReinforcements
+    public Set<UUID> getAggroTargets() {
+        return Collections.unmodifiableSet(aggroTargets);
     }
 
-    public UUID getTargetPlayerUUID() {
-        return this.targetPlayerUUID;
+    public void addAggroTarget(UUID uuid) {
+        aggroTargets.add(uuid);
+    }
+
+    public void clearAggroTargets() {
+        aggroTargets.clear();
     }
 
     public void setAggressive(boolean aggressive) {
         this.entityData.set(AGGRESSIVE, aggressive);
+        if (!aggressive) {
+            this.entityData.set(RETALIATING, false);
+            aggroTargets.clear();
+        }
     }
 
     public boolean isAggressive() {
@@ -387,21 +373,16 @@ public class EnforcerEntity extends PathfinderMob {
     }
 
     private void checkAndSummonReinforcements() {
-        // Only summon if aggressive or has a target
-        if (!isAggressive() && getTarget() == null) {
-            return;
-        }
+        if (!isAggressive() && getTarget() == null) return;
 
         float healthPercentage = this.getHealth() / this.getMaxHealth();
 
-        // Summon 2 reinforcements at 50% health
         if (!hasReinforcedHalf && healthPercentage <= 0.5f) {
             hasReinforcedHalf = true;
             System.out.println("Enforcer summoning reinforcements at 50% health!");
             summonReinforcements(2);
         }
 
-        // Summon 2 more reinforcements at 25% health
         if (!hasReinforcedQuarter && healthPercentage <= 0.25f) {
             hasReinforcedQuarter = true;
             System.out.println("Enforcer summoning reinforcements at 25% health!");
@@ -423,33 +404,25 @@ public class EnforcerEntity extends PathfinderMob {
         for (int i = 0; i < count; i++) {
             EnforcerEntity reinforcement = ModEntities.ENFORCER.get().create(serverLevel);
             if (reinforcement != null) {
-                // Position around the summoner
-                double angle = (Math.PI * 2 * i) / count;
+                double angle    = (Math.PI * 2 * i) / count;
                 double distance = 2.0D;
-                double x = this.getX() + Math.cos(angle) * distance;
-                double z = this.getZ() + Math.sin(angle) * distance;
+                double x        = this.getX() + Math.cos(angle) * distance;
+                double z        = this.getZ() + Math.sin(angle) * distance;
 
                 reinforcement.moveTo(x, this.getY(), z, this.random.nextFloat() * 360.0F, 0.0F);
-
-                // Reinforcements cannot summon more
                 reinforcement.setCanSummon(false);
-
-                // Copy aggressive state and target
                 reinforcement.setAggressive(this.isAggressive());
-                reinforcement.setRetaliating(this.isRetaliating());
+                reinforcement.setRetaliating(false);
+                // AGGRO LIST: propagate aggro targets to reinforcements
+                reinforcement.aggroTargets.addAll(this.aggroTargets);
+
                 if (this.getTarget() != null) {
                     reinforcement.setTarget(this.getTarget());
-                }
-
-                // Copy target player UUID if set
-                if (this.targetPlayerUUID != null) {
-                    reinforcement.setTargetPlayer(this.targetPlayerUUID);
                 }
 
                 serverLevel.addFreshEntity(reinforcement);
                 System.out.println("Spawned reinforcement at " + x + ", " + this.getY() + ", " + z);
 
-                // Spawn particle effect
                 serverLevel.sendParticles(
                         net.minecraft.core.particles.ParticleTypes.POOF,
                         x, this.getY() + 0.5D, z,
@@ -465,13 +438,10 @@ public class EnforcerEntity extends PathfinderMob {
     protected void dropFromLootTable(net.minecraft.world.damagesource.DamageSource damageSource, boolean hitByPlayer) {
         super.dropFromLootTable(damageSource, hitByPlayer);
 
-        // Only drop if this enforcer can summon (i.e., not a reinforcement)
         if (canSummon() && !this.level().isClientSide) {
             ItemStack fiber = new ItemStack(ModItems.ENFORCED_FIBER.get());
-            // Add Curse of Vanishing
             fiber.enchant(net.minecraft.world.item.enchantment.Enchantments.VANISHING_CURSE, 1);
             this.spawnAtLocation(fiber);
         }
     }
-
 }

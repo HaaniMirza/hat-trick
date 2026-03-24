@@ -77,7 +77,7 @@ public class HatTrickCommand {
 
         int count = 0;
         for (EnforcerEntity enforcer : enforcers) {
-            enforcer.setTargetPlayer(targetPlayer.getUUID());
+            enforcer.addAggroTarget(targetPlayer.getUUID());
             count++;
         }
 
@@ -108,7 +108,7 @@ public class HatTrickCommand {
 
         int count = 0;
         for (EnforcerEntity enforcer : enforcers) {
-            enforcer.setTargetPlayer(null);
+            enforcer.addAggroTarget(null);
             count++;
         }
 

@@ -4,7 +4,6 @@ import com.haanibiriyani.hattrick.entity.EnforcerEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
-import java.util.List;
 import java.util.*;
 
 public class EnforcerAggroManager {
@@ -19,20 +18,24 @@ public class EnforcerAggroManager {
         return minGroupSize;
     }
 
-    /**
-     * Sets the minimum group size that triggers the warning/aggro sequence.
-     * Clamped to a minimum of 1 to prevent nonsensical values.
-     */
+    public static double getGroupDetectionRange() {
+        return GROUP_DETECTION_RANGE;
+    }
+
     public static void setMinGroupSize(int size) {
         minGroupSize = Math.max(1, size);
-        // Clear all active warnings since the threshold has changed
         warningStartTimes.clear();
     }
 
-    public static boolean shouldAggroOnPlayerGroup(EnforcerEntity enforcer) {
+    /**
+     * Checks whether the warning timer has expired for this enforcer while a
+     * qualifying group is still present. Returns the list of players to aggro
+     * against, or an empty list if not yet ready to aggro.
+     */
+    public static List<Player> getAggroTargetsFromGroup(EnforcerEntity enforcer) {
         if (enforcer.isAggressive()) {
             warningStartTimes.remove(enforcer.getUUID());
-            return false; // Already aggressive
+            return Collections.emptyList();
         }
 
         AABB searchBox = enforcer.getBoundingBox().inflate(GROUP_DETECTION_RANGE);
@@ -49,38 +52,41 @@ public class EnforcerAggroManager {
 
             if (!warningStartTimes.containsKey(enforcerID)) {
                 warningStartTimes.put(enforcerID, currentTime);
-                return false;
+                return Collections.emptyList();
             }
 
             long elapsed = currentTime - warningStartTimes.get(enforcerID);
 
             if (elapsed > WARN_DURATION_TICKS) {
                 warningStartTimes.remove(enforcerID);
-                Player closestPlayer = nearbyPlayers.stream()
-                        .min(Comparator.comparingDouble(enforcer::distanceToSqr))
-                        .orElse(null);
-
-                if (closestPlayer != null) {
-                    enforcer.setTarget(closestPlayer);
-                    return true;
-                }
+                return nearbyPlayers; // Return all group members
             }
 
-            return false;
+            return Collections.emptyList();
 
         } else {
-
-            return false;
-
+            warningStartTimes.remove(enforcerID);
+            return Collections.emptyList();
         }
+    }
+
+    // Kept for backward compatibility with isInPlayerGroup checks
+    public static boolean shouldAggroOnPlayerGroup(EnforcerEntity enforcer) {
+        List<Player> targets = getAggroTargetsFromGroup(enforcer);
+        if (!targets.isEmpty()) {
+            Player closest = targets.stream()
+                    .min(Comparator.comparingDouble(enforcer::distanceToSqr))
+                    .orElse(null);
+            if (closest != null) {
+                enforcer.setTarget(closest);
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean isInWarningState(EnforcerEntity enforcer) {
         return warningStartTimes.containsKey(enforcer.getUUID());
-    }
-
-    public static double getGroupDetectionRange() {
-        return GROUP_DETECTION_RANGE;
     }
 
     public static float getWarningProgress(EnforcerEntity enforcer) {
@@ -101,7 +107,6 @@ public class EnforcerAggroManager {
                 searchBox,
                 p -> !p.isSpectator() && p != player && enforcer.hasLineOfSight(p)
         );
-
         return nearbyPlayers.size() >= (minGroupSize - 1);
     }
 }
